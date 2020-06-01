@@ -1,3 +1,6 @@
+use std::f32::consts::PI;
+use std::process::exit;
+
 use crate::accel::*;
 use crate::geometry::Mesh;
 use crate::integrators::*;
@@ -6,7 +9,11 @@ use crate::samplers;
 use crate::structure::AABB;
 use crate::volume::*;
 use cgmath::{ElementWise, EuclideanSpace, InnerSpace, Point2, Point3, Vector3};
-use rayon::range;
+use nalgebra::ComplexField;
+use rand::Rng;
+use rand::thread_rng;
+use statrs::distribution::ContinuousCDF;
+use statrs::distribution::Normal;
 
 fn clamp<T: PartialOrd>(v: T, min: T, max: T) -> T {
     if v < min {
@@ -16,6 +23,31 @@ fn clamp<T: PartialOrd>(v: T, min: T, max: T) -> T {
     } else {
         v
     }
+}
+
+fn generate_sample(bias: f32) -> f32 {
+    let mut rng = rand::thread_rng();
+    let p: f32 = rng.gen(); // 生成 [0, 1] 区间内的随机数
+    let sample = (1.0 / PI) * f32::acos(1.0 - 2.0 * p) - bias / PI;
+    sample.rem_euclid(1.0) // 确保结果在 [0, 1] 区间内
+}
+
+fn generate_normal_sample(std_dev: f32) -> f32 {
+    let normal = Normal::new(0.5, std_dev as f64).unwrap();
+    let mut rng = thread_rng();
+
+    loop {
+        let sample = rng.sample(normal) as f32;
+        if (0.0..=1.0).contains(&sample) {
+            return sample;
+        }
+    }
+}
+
+fn normal_pdf(x: f32,std_dev:f32,normalization_factor:f32) -> f32 {
+    let mean = 0.5;
+    let exponent = -(x - mean).powi(2) / (2.0 * std_dev.powi(2));
+    (1.0 / (std_dev * (2.0 * std::f32::consts::PI).sqrt())) * exponent.exp() / normalization_factor
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -721,9 +753,6 @@ impl Integrator for IntegratorSinglePlane {
 
                                         // Proxy sample
                                         SinglePlaneStrategy::ProxySample => {
-                                            // Compute wrap random number for generating fake planes that generate same
-                                            // path configuration. Indeed, we need to be sure that the new planes alpha plane
-                                            // cross the same point on the light source
                                             let mut sample_wrap = {
                                                 let p_l = p_light - rect_light.o;
                                                 Point2::new(
@@ -735,75 +764,119 @@ impl Integrator for IntegratorSinglePlane {
                                             // Mitigate floating point precision issue
                                             sample_wrap.x = clamp(sample_wrap.x, 0.0, 1.0);
                                             sample_wrap.y = clamp(sample_wrap.y, 0.0, 1.0);
-
-                                            // let mut sum_contrib = 0.0;
-                                            // let num=50;
-                                            // for _ in 0..num  {
-                                            //     // The new alpha
-                                            //     let new_alpha = sampler_ecmis.next();
-                                            //     assert!(new_alpha >= 0.0 && new_alpha <= 1.0);
-
-                                            //     // This construct a new plane (call previous snipped)
-                                            //     // to generate the plane
-                                            //     let new_plane = SinglePhotonPlane::new(
-                                            //         PlaneType::UAlphaT,
-                                            //         &rect_light,
-                                            //         plane.d1,
-                                            //         sample_wrap, // Random number used to sample the point on the light source
-                                            //         new_alpha,
-                                            //         0.0,
-                                            //         plane.id_emitter,
-                                            //         m.sigma_s,
-                                            //     );
-
-                                            //     // Accumulate the weight
-                                            //     sum_contrib += new_plane.d1
-                                            //                     .cross(new_plane.d0)
-                                            //                     .dot(ray.d)
-                                            //                     .abs();
-                                            // }
-                                            // let inv_norm = num as f32 / sum_contrib;
-                                            let mut inv_norm:f32=0.0;
-                                            let mut num_pos_stack = 1;
-                                            let mut max_stack = 1000;
-                                            //let B=(rect_light.u_l.powf(2.0)+rect_light.v_l.powf(2.0)).sqrt();
-                                            let B=rect_light.u_l.max(rect_light.v_l);
-                                            while num_pos_stack != 0 && max_stack > 0 {
-                                                let sign = if num_pos_stack > 0 { 1.0 } else { -1.0 };
-                                                num_pos_stack -= sign as i32;
-
-                                                // This construct a new plane (call previous snipped)
-                                                // to generate the plane
-                                                let new_plane = SinglePhotonPlane::new(
-                                                    PlaneType::UAlphaT,
-                                                    &rect_light,
-                                                    plane.d1,
-                                                    sample_wrap, // Random number used to sample the point on the light source
-                                                    sampler_ecmis.next(),
-                                                    0.0,
-                                                    plane.id_emitter,
-                                                    m.sigma_s,
-                                                );
-                                                let f0 = new_plane
-                                                            .d1
-                                                            .cross(new_plane.d0)
-                                                            .dot(ray.d)
-                                                            .abs();
-                                                let g0=1.0-f0/B;
-                                                
-                                                assert!(g0>=0.0);
-                                                
-                                                inv_norm += 1.0 / B * sign; // Replace 0.0 with the actual value of B.
-                                                let r0 = g0.abs();
-                                                let mut r_round = r0.floor();
-                                                if sampler_ecmis.next() < r0 - r_round{
-                                                    r_round += 1.0;
-                                                }
-                                                num_pos_stack += sign as i32 * r_round as i32;
-                                                max_stack -= 1;
-                                            }   
                                             
-                                            inv_norm*plane.weight
+                                            let mut inv_norm:f32=0.0;
+                                            if self.stratified{
+                                                let mut sum_contrib = 0.0;
+                                                let num=50;
+                                                for _ in 0..num  {
+                                                    // The new alpha
+                                                    let new_alpha = sampler_ecmis.next();
+                                                    assert!(new_alpha >= 0.0 && new_alpha <= 1.0);
+
+                                                    // This construct a new plane (call previous snipped)
+                                                    // to generate the plane
+                                                    let new_plane = SinglePhotonPlane::new(
+                                                        PlaneType::UAlphaT,
+                                                        &rect_light,
+                                                        plane.d1,
+                                                        sample_wrap, // Random number used to sample the point on the light source
+                                                        new_alpha,
+                                                        0.0,
+                                                        plane.id_emitter,
+                                                        m.sigma_s,
+                                                    );
+
+                                                    // Accumulate the weight
+                                                    sum_contrib += new_plane.d1
+                                                                    .cross(new_plane.d0)
+                                                                    .dot(ray.d)
+                                                                    .abs();
+                                                }
+                                                inv_norm = num as f32 / sum_contrib;
+                                            }
+                                            else 
+                                            {
+                                                let mut num_pos_stack = 1;
+                                                let mut max_stack = 1000;
+
+                                                // //Now f(x)=Asin(pi*x)+B*os(pi*x)
+                                                // let A=rect_light.v.cross(plane.d1).dot(ray.d);
+                                                // let B=rect_light.u.cross(plane.d1).dot(ray.d);
+                                                // let amplitude=(A.powf(2.0)+B.powf(2.0)).sqrt();
+                                                // let bias=f32::atan2(B,A);
+
+                                                // let b=2.0*amplitude/PI*(rect_light.u_l.powf(2.0)+rect_light.v_l.powf(2.0)).sqrt();
+                                                // let min_limit=0.0001;
+                                                // //test code base
+                                                // for n in 0..1000{
+                                                //     let x= n as f32/1000.0;
+                                                //     let new_plane = SinglePhotonPlane::new(
+                                                //         PlaneType::UAlphaT,
+                                                //         &rect_light,
+                                                //         plane.d1,
+                                                //         sample_wrap,
+                                                //         x,
+                                                //         0.0,
+                                                //         plane.id_emitter,
+                                                //         m.sigma_s,
+                                                //     );
+                                                //     let ff=new_plane
+                                                //     .d1
+                                                //     .cross(new_plane.d0)
+                                                //     .dot(ray.d).abs();
+                                                //     let uu=new_plane.length0;
+                                                //     let gg=ff*new_plane.length0;
+                                                //     let tt=normal_pdf(x);
+                                                //     println!("{} {} {} {} {}",x,ff,uu,gg,tt);
+                                                // }
+                                                // exit(0);
+                                                let tao=0.5;
+                                                let b=(2.0*PI).sqrt()*tao*rect_light.u_l.max(rect_light.v_l)/(-0.125/tao.powf(2.0)).exp();
+                                                let normalization_factor={
+                                                    let normal = Normal::new(0.5, tao as f64).unwrap();
+                                                    (normal.cdf(1.0) - normal.cdf(0.0)) as f32
+                                                };
+                                                while num_pos_stack != 0 && max_stack > 0 {
+                                                    let mut sign = if num_pos_stack > 0 { 1.0 } else { -1.0 };
+                                                    num_pos_stack -= sign as i32;
+
+                                                    let next_sample=generate_normal_sample(tao);
+
+                                                    let new_plane = SinglePhotonPlane::new(
+                                                        PlaneType::UAlphaT,
+                                                        &rect_light,
+                                                        plane.d1,
+                                                        sample_wrap, // Random number used to sample the point on the light source
+                                                        next_sample,
+                                                        0.0,
+                                                        plane.id_emitter,
+                                                        m.sigma_s,
+                                                    );
+
+
+                                                    let f0: f32 = new_plane
+                                                                .d1
+                                                                .cross(new_plane.d0)
+                                                                .dot(ray.d)
+                                                                .abs()*new_plane.length0;
+                                                    let p0=normal_pdf(next_sample,tao,normalization_factor);
+                                                    let g0=1.0-f0/(p0*b);
+                                                    
+                                                    inv_norm += 1.0 / b * sign; 
+                                                    if g0<0.0 {
+                                                        sign*=-1.0;
+                                                    }
+                                                    let r0 = g0.abs();
+                                                    let mut r_round = r0.floor();
+                                                    if sampler_ecmis.next() < r0 - r_round{
+                                                        r_round += 1.0;
+                                                    }
+                                                    num_pos_stack += sign as i32 * r_round as i32;
+                                                    max_stack -= 1;
+                                                }
+                                            }
+                                            inv_norm*plane.weight*plane.length0
                                         }
                                         // Default: evaluate and weight the contrib
                                         // plane.contrib(..) =  plane.weight / jacobian

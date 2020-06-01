@@ -702,6 +702,7 @@ fn main() {
                 "smis_jacobian" => { 
                     rustlight::integrators::explicit::plane_single::SinglePlaneStrategy::SMISJacobian(samples_smis)
                 }
+                "proxy_sample" => rustlight::integrators::explicit::plane_single::SinglePlaneStrategy::ProxySample,
                 _ => panic!(
                     "{} is not a correct strategy choice (uv, ut, vt, average, discrete_mis, valpha, cmis)",
                     strategy

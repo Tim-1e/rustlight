@@ -16,7 +16,13 @@ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -
 proxy
 cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o proxy.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s proxy_sample
 
+proxy-sum
+cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o proxy_sum.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s proxy_sample -x
 
-proxy Elapsed Integrator: 32667 ms
-sims Elapsed Integrator: 18328 ms
+cargo run --features="pbrt progress-bar" --release --example=cli -- -t -1 -n 1 -o proxy.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 1 -s proxy_sample >a.txt
+
+sims Elapsed Integrator: 27328 ms 2
+smis Elapsed Integrator: 31123 ms 3
+
+
 

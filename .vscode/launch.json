@@ -1,48 +1,15 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Launch",
-      "type": "lldb",
-      "request": "launch",
-      "program": "${workspaceRoot}/target/debug/rustlight",
-      "target": "${workspaceRoot}/target/debug/rustlight",
-      "cwd": "${workspaceRoot}",
-      "args": [
-        "-t",
-        "-2",
-        "-n",
-        "1",
-        "-o",
-        "ualpha.exr",
-        "-m",
-        "0.2",
-        "scene/meeting_ply.pbrt",
-        "plane_single",
-        "-n",
-        "40960",
-        "-s",
-        "ualpha"
-      ]
-    },
-    {
-      "name": "C/C++ Runner: Debug Session",
-      "type": "cppdbg",
-      "request": "launch",
-      "args": [],
-      "stopAtEntry": false,
-      "externalConsole": true,
-      "cwd": "c:/src/vcpkg/buildtrees/openexr/src/v3.1.8-6393bee0eb.clean/src/lib/OpenEXR",
-      "program": "c:/src/vcpkg/buildtrees/openexr/src/v3.1.8-6393bee0eb.clean/src/lib/OpenEXR/build/Debug/outDebug",
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb",
-      "setupCommands": [
+    "version": "0.2.0",
+    "configurations": [
         {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
+            "type": "lldb", // 或者 "cppdbg"，取决于你使用的调试器
+            "request": "launch",
+            "name": "Debug Cargo Run",
+            "cargo": {
+                "args": ["run", "--example=cli", "--features=pbrt progress-bar", "--release","--","-t", "-2", "-n", "1", "-o", "proxy.png", "-m", "0.2", "scene/meeting_ply.pbrt", "plane-single", "-n", "40960", "-s", "proxy_sample"],
+            },
+            "cwd": "${workspaceFolder}"
         }
-      ]
-    }
-  ]
-}
+    ]
+  }
+  
