@@ -1,4 +1,5 @@
 use std::f32::consts::PI;
+use std::ops::Add;
 use std::process::exit;
 
 use crate::accel::*;
@@ -12,6 +13,8 @@ use cgmath::{ElementWise, EuclideanSpace, InnerSpace, Point2, Point3, Vector3};
 use nalgebra::ComplexField;
 use rand::Rng;
 use rand::thread_rng;
+use rand::distributions::{Distribution, WeightedIndex};
+use rand_distr::Normal as EasyNormal;
 use statrs::distribution::ContinuousCDF;
 use statrs::distribution::Normal;
 
@@ -25,15 +28,68 @@ fn clamp<T: PartialOrd>(v: T, min: T, max: T) -> T {
     }
 }
 
-fn generate_sample(bias: f32) -> f32 {
+fn direct_int(a: f32, b: f32, c: f32,A: f32,B: f32) -> f32 {
+    if c<f32::EPSILON
+    {
+        return 0.0;
+    };
+    let t = f32::atan2(B, -A);
+    let t1 = f32::atan2(c, b);
+    let t2 = f32::atan2(c, -a);
+    let sign1 = if t < t1 { -1.0 } else { 1.0 };
+    let sign2 = if t1 <= t && t <= t2 { -1.0 } else { sign1 };
+    let int1 = {
+        if b>f32::EPSILON{
+            if t < t1 {
+                b * (A * f32::ln(f32::cos(t1) / f32::cos(t).powi(2)) + B * (2.0 * t - t1))
+            } else {
+                b * (A * f32::ln(1.0 / f32::cos(t1)) + B * t1)
+            }
+        }
+        else{
+            0.0
+        }
+    };
+    //assert!(int1>=0.0);
+    let int2 ={
+        if t1 <= t && t <= t2 {
+            c * (A * (2.0 * t - t1 - t2) + B * f32::ln(f32::sin(t).powi(2) / (f32::sin(t1) * f32::sin(t2))))
+        } else {
+            c * (A * (t2 - t1) + B * f32::ln(f32::sin(t2) / f32::sin(t1))) * sign1
+        }
+    };
+    //assert!(int2>=0.0);
+    let int3 = {
+        if a>f32::EPSILON{
+            if t > t2 {
+                //sign = -1.0;
+                -a * (A * f32::ln(-f32::cos(t2) / f32::cos(t).powi(2)) + B * (2.0 * t - t2 - PI))
+                
+            } else {
+                -a * (A * f32::ln(-f32::cos(t2)) + B * (PI - t2)) * sign2
+            }  
+        }
+        else {
+            0.0
+        }
+    };
+    //assert!(int3>=0.0);
+    (int1 + int2 + int3) / PI
+}
+
+fn generate_sin_sample(bias: f32) -> f32 {
     let mut rng = rand::thread_rng();
     let p: f32 = rng.gen(); // 生成 [0, 1] 区间内的随机数
     let sample = (1.0 / PI) * f32::acos(1.0 - 2.0 * p) - bias / PI;
     sample.rem_euclid(1.0) // 确保结果在 [0, 1] 区间内
 }
 
+fn sin_pdf(x: f32,bias:f32) -> f32 {
+    (PI/2.0*f32::sin(PI*x+bias)).abs()
+}
+
 fn generate_normal_sample(std_dev: f32) -> f32 {
-    let normal = Normal::new(0.5, std_dev as f64).unwrap();
+    let normal = EasyNormal::new(0.5, std_dev as f32).unwrap();
     let mut rng = thread_rng();
 
     loop {
@@ -48,6 +104,78 @@ fn normal_pdf(x: f32,std_dev:f32,normalization_factor:f32) -> f32 {
     let mean = 0.5;
     let exponent = -(x - mean).powi(2) / (2.0 * std_dev.powi(2));
     (1.0 / (std_dev * (2.0 * std::f32::consts::PI).sqrt())) * exponent.exp() / normalization_factor
+}
+
+// 采样点与角度转换
+fn calculate_angle_with_ab_corrected_v2(x_i: f32, y_i: f32, a: f32, b: f32) -> f32 {
+    let dx = x_i - a;
+    let dy = y_i - b;
+    let angle = dy.atan2(dx) / std::f32::consts::PI;
+    angle.rem_euclid(1.0)
+}
+
+// 计算函数 f(m, n)
+fn calculate_f(m: f32, n: f32) -> f32 {
+    if n == 0.0 || m == 0.0 {
+        return 0.0;
+    }
+    m * ((1.0 + (n / m).powi(2)).sqrt() + n / m).ln()
+}
+
+fn generate_len_sample(u: f32, v: f32, a: f32, b: f32) -> f32 {
+    // 四个小矩形的长宽
+    let rectangles = [
+        (a, b), (u - a, b), (a, v - b), (u - a, v - b), 
+        (b, a), (b, u - a), (v - b, a), (v - b, u - a)
+    ];
+
+    // 计算每个小矩形的 f(m, n)
+    let mut f_values = Vec::new();
+    for (i, &(m, n)) in rectangles.iter().enumerate() {
+        f_values.push((calculate_f(m, n), i));
+    }
+
+    let total_f: f32 = f_values.iter().map(|f| f.0).sum();
+    let weights: Vec<_> = f_values.iter().map(|f| f.0 / total_f).collect();
+    
+    let dist = match WeightedIndex::new(&weights) {
+        Ok(d) => d,
+        Err(e) => {
+            // 打印错误信息和权重数组
+            eprintln!("Weights: {:?}", weights);
+            eprintln!("f_values: {:?}", f_values);
+            eprintln!("rectangles: {:?}", rectangles);
+            exit(0);
+        }
+    };
+    
+    let mut rng = thread_rng();
+    let sampled_index = dist.sample(&mut rng);
+    let (c_a, c_b) = rectangles[sampled_index];
+    let y: f32 = rand::random(); // 生成一个随机数
+
+    let t = ((c_a.powi(2) + c_b.powi(2)).sqrt() + c_b) / c_a;
+    let n = t.powf(y);
+    let x = c_a * (n - 1.0 / n) / 2.0;
+
+    // 根据索引确定采样点
+    let (sampled_x, sampled_y) = match sampled_index {
+        0..=3 => {
+            let sampled_x = if sampled_index % 2 == 0 { 0.0 } else { u };
+            let sampled_y = if sampled_index < 2 { b - x } else { b + x };
+            (sampled_x, sampled_y)
+        },
+        _ => {
+            let sampled_x = if sampled_index % 2 == 0 { a - x } else { a + x };
+            let sampled_y = if sampled_index < 6 { 0.0 } else { v };
+            (sampled_x, sampled_y)
+        },
+    };
+    calculate_angle_with_ab_corrected_v2(sampled_x, sampled_y, a, b)
+}
+
+fn len_pdf(intergrate:f32,length:f32) ->f32 {
+    length/intergrate
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -482,13 +610,65 @@ impl Integrator for IntegratorSinglePlane {
             number_plane_gen += 1;
         }
 
+        let s_size=20;
+        let e_size=100;
+        let x_size=1000;
+        // build h_x cache with size as rect_lights.len()*s_size*8s_size*e_size*x_size
+        let mut h_x = vec![vec![vec![vec![vec![0.0f32;x_size];e_size];8*s_size];s_size];rect_lights.len()];
+        let mut b_max=vec![vec![vec![vec![0.0f32;e_size];8*s_size];s_size];rect_lights.len()];
+        match self.strategy {
+            SinglePlaneStrategy::ProxySample => {
+                let light_length = rect_lights.len();
+                
+                for light_index in 0..light_length{
+                    for u_index in 0..s_size as usize{
+                        for v_index in 0..8*s_size as usize{
+                            for e_index in 0..e_size{
+                                let mut unnormalize_h_x=vec![0.0f32;x_size];
+                                let mut accumulate=0.0f32;
+                                for x_index in 0..x_size {
+                                    //Now f(x)=Asin(pi*x)+B*cos(pi*x)
+                                    let bias=PI/(e_size as f32)*(e_index as f32+0.5);
+                                    let x=(x_index as f32+0.5)/(x_size as f32);
+                                    let rect_light=&rect_lights[light_index];
+                                    let dx: f32=(u_index as f32+0.5)/(s_size as f32);
+                                    let dy: f32=(v_index as f32+0.5)/(8.0*s_size as f32);
+
+                                    //calculate the length of the segment
+                                    let plane2d_its = |d: Vector2<f32>, o: Point2<f32>| {
+                                        let t_0 = (-o.to_vec()).div_element_wise(d);
+                                        let t_1 = (Vector2::new(rect_light.u_l, rect_light.v_l) - o.to_vec()).div_element_wise(d);
+                                        let t_max_coord = Vector2::new(t_0.x.max(t_1.x), t_0.y.max(t_1.y));
+                                        o + d * t_max_coord.x.min(t_max_coord.y)
+                                    };
+                    
+                                    let o_plane = Point2::new(dx*rect_light.u_l, dy*rect_light.v_l);
+                                    let alpha = std::f32::consts::PI * x;
+                                    let d_plane: Vector2<f32> = Vector2::new(alpha.cos(), alpha.sin());
+                                    let p1_2d = plane2d_its(d_plane, o_plane);
+                                    let p2_2d = plane2d_its(-d_plane, o_plane);
+                                    let uu=f32::sin(PI*x+bias).abs()*(p1_2d-p2_2d).magnitude();
+                                    unnormalize_h_x[x_index]=uu;
+                                    accumulate+=uu;
+                                }
+                                b_max[light_index][u_index][v_index][e_index]=accumulate;
+                                unnormalize_h_x.iter_mut().for_each(|x|{*x/=accumulate;});
+                                h_x[light_index][u_index][v_index][e_index]=unnormalize_h_x;
+                                //println!("h_x[{}][{}][{}][{}]={:?}",light_index,u_index,v_index,e_index,h_x[light_index][u_index][v_index][e_index]);
+                            }
+                        }
+                    }
+                }
+            }
+            _=> {}
+        };
         // Build the BVH to speedup the computation...
         let bvh_plane = BHVAccel::create(planes);
 
         // Generate the image block to get VPL efficiently
         let buffernames = vec![String::from("primal")];
         let mut image_blocks = generate_img_blocks(scene, sampler, &buffernames);
-
+        let sample_num=Mutex::new(0.0);
         // Gathering all planes
         info!("Gathering Single planes...");
         let progress_bar = Mutex::new(ProgressBar::new(image_blocks.len() as u64));
@@ -505,7 +685,7 @@ impl Integrator for IntegratorSinglePlane {
                     let mut sampler_ecmis = samplers::independent::IndependentSampler::from_seed(
                         (im_block.pos.x + im_block.pos.y) as u64,
                     );
-                    
+                    let mut block_sampel_num=0;
                     for ix in 0..im_block.size.x {
                         for iy in 0..im_block.size.y {
                             for _ in 0..scene.nb_samples {
@@ -633,7 +813,7 @@ impl Integrator for IntegratorSinglePlane {
                                             // Here we use their integration from
                                             // Normally, all the jacobian simplifies
                                             // So it is why we need to have a special estimator
-
+                                            block_sampel_num+=1;
                                             1.0 / ((2.0 / std::f32::consts::PI)
                                                 * (rect_light.u.cross(plane.d1).dot(ray.d).powi(2)
                                                     + rect_light.v.cross(plane.d1).dot(ray.d).powi(2))
@@ -747,7 +927,7 @@ impl Integrator for IntegratorSinglePlane {
                                                 }
                                                 _ => panic!("Unimplemented"),
                                             };
-
+                                            block_sampel_num+=n_samples;
                                             w * contrib
                                         }
 
@@ -767,50 +947,70 @@ impl Integrator for IntegratorSinglePlane {
                                             
                                             let mut inv_norm:f32=0.0;
                                             if self.stratified{
-                                                let mut sum_contrib = 0.0;
-                                                let num=50;
-                                                for _ in 0..num  {
-                                                    // The new alpha
-                                                    let new_alpha = sampler_ecmis.next();
-                                                    assert!(new_alpha >= 0.0 && new_alpha <= 1.0);
-
-                                                    // This construct a new plane (call previous snipped)
-                                                    // to generate the plane
-                                                    let new_plane = SinglePhotonPlane::new(
-                                                        PlaneType::UAlphaT,
-                                                        &rect_light,
-                                                        plane.d1,
-                                                        sample_wrap, // Random number used to sample the point on the light source
-                                                        new_alpha,
-                                                        0.0,
-                                                        plane.id_emitter,
-                                                        m.sigma_s,
-                                                    );
-
-                                                    // Accumulate the weight
-                                                    sum_contrib += new_plane.d1
-                                                                    .cross(new_plane.d0)
-                                                                    .dot(ray.d)
-                                                                    .abs();
+                                                let mut A=rect_light.v.cross(plane.d1).dot(ray.d);
+                                                let mut B=rect_light.u.cross(plane.d1).dot(ray.d);
+                                                if B<0.0 {
+                                                    A=-A;
+                                                    B=-B;
                                                 }
-                                                inv_norm = num as f32 / sum_contrib;
+                                                
+                                                let dx: f32=rect_light.u_l*sample_wrap.x;
+                                                let dy=rect_light.v_l*sample_wrap.y;
+                                                let uu=direct_int(dx, rect_light.u_l-dx, rect_light.v_l-dy, A, B)
+                                                +direct_int(rect_light.u_l-dx, dx, dy, A, B);
+                                                inv_norm=1.0/uu;
+                                                block_sampel_num+=1;
                                             }
                                             else 
                                             {
                                                 let mut num_pos_stack = 1;
                                                 let mut max_stack = 1000;
 
-                                                // //Now f(x)=Asin(pi*x)+B*os(pi*x)
-                                                // let A=rect_light.v.cross(plane.d1).dot(ray.d);
-                                                // let B=rect_light.u.cross(plane.d1).dot(ray.d);
-                                                // let amplitude=(A.powf(2.0)+B.powf(2.0)).sqrt();
-                                                // let bias=f32::atan2(B,A);
+                                                //Now f(x)=Asin(pi*x)+B*cos(pi*x)
+                                                let mut A=rect_light.v.cross(plane.d1).dot(ray.d);
+                                                let mut B=rect_light.u.cross(plane.d1).dot(ray.d);
+                                                if B<0.0 {
+                                                    A=-A;
+                                                    B=-B;
+                                                }
+                                                // let b=b_max[plane.id_emitter];
+                                                let amplitude=(A.powf(2.0)+B.powf(2.0)).sqrt();
+                                                let bias=f32::atan2(B,A);
+                                                // let mut b=2.0*amplitude/PI*(rect_light.u_l.powf(2.0)+rect_light.v_l.powf(2.0)).sqrt();
+                                                let a_index={
+                                                    match (sample_wrap.x*(s_size as f32)) as usize{
+                                                        u if u==s_size =>s_size-1,
+                                                        u=>u,
+                                                    }
+                                                };
+                                                let b_index={
+                                                    match (sample_wrap.y*(8.0*s_size as f32)) as usize{
+                                                        v if v==8*s_size =>8*s_size-1,
+                                                        v=>v,
+                                                    }
+                                                };
+                                                let e_index={
+                                                    match (bias/PI*(e_size as f32)) as usize{
+                                                        e if e==e_size =>e_size-1,
+                                                        e=>e,
+                                                    }
+                                                };
+                                                let alpha=0.0;//uniform_sample rate
+                                                let b=amplitude*b_max[plane.id_emitter][a_index][b_index][e_index]/x_size as f32;
+                                                //println!("b:{}",b);
+                                                // let mut b=2.0*amplitude/PI*(rect_light.u_l.powf(2.0)+rect_light.v_l.powf(2.0)).sqrt();
+                                                // let dx: f32=rect_light.u_l*sample_wrap.x;
+                                                // let dy=rect_light.v_l*sample_wrap.y;
+                                                // let uu=direct_int(dx, rect_light.u_l-dx, rect_light.v_l-dy, A, B)
+                                                // +direct_int(rect_light.u_l-dx, dx, dy, A, B);
+                                                //inv_norm=1.0/uu;
 
-                                                // let b=2.0*amplitude/PI*(rect_light.u_l.powf(2.0)+rect_light.v_l.powf(2.0)).sqrt();
-                                                // let min_limit=0.0001;
-                                                // //test code base
-                                                // for n in 0..1000{
-                                                //     let x= n as f32/1000.0;
+                                                
+                                                //test code base
+                                                // let mut v_c=vec![0.0f32;x_size];
+                                                // let mut c_c=vec![0.0f32;x_size];
+                                                // for n in 0..x_size{
+                                                //     let x= (n as f32+0.5)/x_size as f32;
                                                 //     let new_plane = SinglePhotonPlane::new(
                                                 //         PlaneType::UAlphaT,
                                                 //         &rect_light,
@@ -824,45 +1024,161 @@ impl Integrator for IntegratorSinglePlane {
                                                 //     let ff=new_plane
                                                 //     .d1
                                                 //     .cross(new_plane.d0)
-                                                //     .dot(ray.d).abs();
-                                                //     let uu=new_plane.length0;
-                                                //     let gg=ff*new_plane.length0;
-                                                //     let tt=normal_pdf(x);
-                                                //     println!("{} {} {} {} {}",x,ff,uu,gg,tt);
+                                                //     .dot(ray.d).abs()*new_plane.length0;
+                                                //     v_c[n]=ff;
+
+                                                //     let c_sample_wrap=Point2::new(
+                                                //         (a_index as f32+0.5)/s_size as f32,
+                                                //         (b_index as f32+0.5)/(8.0*s_size as f32),
+                                                //     );
+                                                //     let new_plane = SinglePhotonPlane::new(
+                                                //         PlaneType::UAlphaT,
+                                                //         &rect_light,
+                                                //         plane.d1,
+                                                //         c_sample_wrap,
+                                                //         x,
+                                                //         0.0,
+                                                //         plane.id_emitter,
+                                                //         m.sigma_s,
+                                                //     );
+                                                //     let bias=PI/(e_size as f32)*(e_index as f32+0.5);
+                                                //     let ff=new_plane.length0*amplitude*f32::sin(PI*x+bias).abs();
+                                                //     c_c[n]=ff;
                                                 // }
+                                                // println!("v_c={:?}\nh_x={:?}\nc_c={:?}",v_c,h_x[plane.id_emitter][a_index][b_index][e_index],c_c);
                                                 // exit(0);
-                                                let tao=0.5;
-                                                let b=(2.0*PI).sqrt()*tao*rect_light.u_l.max(rect_light.v_l)/(-0.125/tao.powf(2.0)).exp();
-                                                let normalization_factor={
-                                                    let normal = Normal::new(0.5, tao as f64).unwrap();
-                                                    (normal.cdf(1.0) - normal.cdf(0.0)) as f32
-                                                };
-                                                while num_pos_stack != 0 && max_stack > 0 {
+                                                // let tao=0.5;
+                                                // let normalization_factor={
+                                                //     let normal = Normal::new(0.5, tao as f64).unwrap();
+                                                //     (normal.cdf(1.0) - normal.cdf(0.0)) as f32
+                                                // };
+                                                // b=b*0.5+(1.0*PI).sqrt()*tao*rect_light.u_l.max(rect_light.v_l)/(-0.125/tao.powf(2.0)).exp();
+                                                //println!("b:{} b1:{}",b,b1);
+                                                //b=b.max(b1);
+                                                
+                                                let intergrate={
+                                                    let u=rect_light.u_l;
+                                                    let v=rect_light.v_l;
+                                                    let a=rect_light.u_l*sample_wrap.x;
+                                                    let b=rect_light.v_l*sample_wrap.y;
+                                                    let rectangles = [(a, b), (u - a, b), (a, v - b), (u - a, v - b)];
+                                                    let mut intergrate=0.0;
+                                                    for &(m, n) in &rectangles {
+                                                        intergrate+=calculate_f(m, n);
+                                                        intergrate+=calculate_f(n, m);
+                                                    }
+                                                    intergrate/PI
+                                                };  
+                                                //println!("b:{}",b);
+                                                b=2.0/(1.0/intergrate+1.0/b);
+                                                // b=1.0;
+                                                 while num_pos_stack != 0 && max_stack > 0 {
                                                     let mut sign = if num_pos_stack > 0 { 1.0 } else { -1.0 };
                                                     num_pos_stack -= sign as i32;
 
-                                                    let next_sample=generate_normal_sample(tao);
+                                                    // let next_sample_normal=generate_normal_sample(tao);
+                                                    // let plane_normal = SinglePhotonPlane::new(
+                                                    //     PlaneType::UAlphaT,
+                                                    //     &rect_light,
+                                                    //     plane.d1,
+                                                    //     sample_wrap, // Random number used to sample the point on the light source
+                                                    //     next_sample_normal,
+                                                    //     0.0,
+                                                    //     plane.id_emitter,
+                                                    //     m.sigma_s,
+                                                    // );
+                                                    // let f0: f32 = plane_normal
+                                                    //             .d1
+                                                    //             .cross(plane_normal.d0)
+                                                    //             .dot(ray.d)
+                                                    //             .abs()*plane_normal.length0;
 
-                                                    let new_plane = SinglePhotonPlane::new(
+                                                    // let next_sample_sin=generate_sin_sample(bias);
+                                                    // let plane_sin=SinglePhotonPlane::new(
+                                                    //     PlaneType::UAlphaT,
+                                                    //     &rect_light,
+                                                    //     plane.d1,
+                                                    //     sample_wrap, // Random number used to sample the point on the light source
+                                                    //     next_sample_sin,
+                                                    //     0.0,
+                                                    //     plane.id_emitter,
+                                                    //     m.sigma_s,
+                                                    // );
+                                                    // let f1: f32 = plane_sin
+                                                    //             .d1
+                                                    //             .cross(plane_sin.d0)
+                                                    //             .dot(ray.d)
+                                                    //             .abs()*plane_sin.length0;
+
+                                                    // let next_sample_len=generate_len_sample(rect_light.u_l, rect_light.v_l, rect_light.u_l*sample_wrap.x, rect_light.v_l*sample_wrap.y);
+                                                    // let plane_len=SinglePhotonPlane::new(
+                                                    //     PlaneType::UAlphaT,
+                                                    //     &rect_light,
+                                                    //     plane.d1,
+                                                    //     sample_wrap, // Random number used to sample the point on the light source
+                                                    //     next_sample_len,
+                                                    //     0.0,
+                                                    //     plane.id_emitter,
+                                                    //     m.sigma_s,
+                                                    // );
+                                                    // let f2: f32 = plane_len
+                                                    //             .d1
+                                                    //             .cross(plane_len.d0)
+                                                    //             .dot(ray.d)
+                                                    //             .abs()*plane_len.length0;
+
+                                                    let (next_sample_mis,p_mis)={
+                                                        if sampler_ecmis.next()<alpha{
+                                                            (sampler_ecmis.next(),1.0f32)
+                                                        }
+                                                        else{
+                                                            let weights=(h_x[plane.id_emitter][a_index][b_index][e_index]).clone();
+                                                            let dist = match WeightedIndex::new(&weights) {
+                                                                Ok(d) => d,
+                                                                Err(e) => {
+                                                                    // 打印错误信息和权重数组
+                                                                    eprintln!("Weights: {:?}", weights);
+                                                                    exit(0);
+                                                                }
+                                                            };
+                                                            
+                                                            let mut rng = thread_rng();
+                                                            let sampled_index = dist.sample(&mut rng);
+                                                            ((sampled_index as f32+sampler_ecmis.next())/x_size as f32,h_x[plane.id_emitter][a_index][b_index][e_index][sampled_index]*x_size as f32)
+                                                        }              
+                                                    };
+                                                    let plane_mis=SinglePhotonPlane::new(
                                                         PlaneType::UAlphaT,
                                                         &rect_light,
                                                         plane.d1,
                                                         sample_wrap, // Random number used to sample the point on the light source
-                                                        next_sample,
+                                                        next_sample_mis,
                                                         0.0,
                                                         plane.id_emitter,
                                                         m.sigma_s,
                                                     );
-
-
-                                                    let f0: f32 = new_plane
+                                                    let f3: f32 = plane_mis
                                                                 .d1
-                                                                .cross(new_plane.d0)
+                                                                .cross(plane_mis.d0)
                                                                 .dot(ray.d)
-                                                                .abs()*new_plane.length0;
-                                                    let p0=normal_pdf(next_sample,tao,normalization_factor);
-                                                    let g0=1.0-f0/(p0*b);
+                                                                .abs()*plane_mis.length0;
+                                                    let ff=f3/p_mis;
                                                     
+                                                    // let p0_normal=normal_pdf(next_sample_normal,tao,normalization_factor);
+                                                    // let p0_sin=sin_pdf(next_sample_normal,bias);
+                                                    // let p1_normal=normal_pdf(next_sample_sin,tao,normalization_factor);
+                                                    // let p1_sin=sin_pdf(next_sample_sin,bias);
+                                                    // let p1_len=len_pdf(intergrate,plane_sin.length0);
+                                                    // let p2_sin=sin_pdf(next_sample_len,bias);
+                                                    // let p2_len=len_pdf(intergrate,plane_len.length0);
+
+                                                    //let ff=f0/(p0_normal+p0_sin)+f1/(p1_normal+p1_sin);
+                                                    // let ff=f1/(p1_sin+p1_len)+f2/(p2_sin+p2_len);
+                                                    //let ff=f2/p2_len;
+
+                                                    let g0=1.0-ff/b;
+                                                    //assert!(g0>=0.0);
+                                                    //println!("{} {}",g0,b);
                                                     inv_norm += 1.0 / b * sign; 
                                                     if g0<0.0 {
                                                         sign*=-1.0;
@@ -875,6 +1191,9 @@ impl Integrator for IntegratorSinglePlane {
                                                     num_pos_stack += sign as i32 * r_round as i32;
                                                     max_stack -= 1;
                                                 }
+                                                // 
+                                                //println!("Iter:{}",1000-max_stack);
+                                                block_sampel_num+=1000-max_stack;
                                             }
                                             inv_norm*plane.weight*plane.length0
                                         }
@@ -894,7 +1213,6 @@ impl Integrator for IntegratorSinglePlane {
                                         * (1.0 / number_plane_gen as f32);
                                 }
                             }
-
                                 im_block.accumulate(
                                     Point2 { x: ix, y: iy },
                                     c,
@@ -903,13 +1221,18 @@ impl Integrator for IntegratorSinglePlane {
                             }
                         }
                     } // Image block
+                    {
+                        let mut num =sample_num.lock().unwrap();
+                        *num+=block_sampel_num as f32;
+                    }
                     im_block.scale(1.0 / (scene.nb_samples as f32));
                     {
                         progress_bar.lock().unwrap().inc();
                     }
                 });
         });
-
+        println!("\n Sample number_all:{}",sample_num.lock().unwrap());
+        println!("Sample number:{}",*sample_num.lock().unwrap()/(scene.camera.size().x*scene.camera.size().y) as f32);
         let mut image =
             BufferCollection::new(Point2::new(0, 0), *scene.camera.size(), &buffernames);
         for (im_block, _) in &image_blocks {
