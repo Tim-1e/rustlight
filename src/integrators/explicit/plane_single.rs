@@ -1056,21 +1056,20 @@ impl Integrator for IntegratorSinglePlane {
                                                 //println!("b:{} b1:{}",b,b1);
                                                 //b=b.max(b1);
                                                 
-                                                let intergrate={
-                                                    let u=rect_light.u_l;
-                                                    let v=rect_light.v_l;
-                                                    let a=rect_light.u_l*sample_wrap.x;
-                                                    let b=rect_light.v_l*sample_wrap.y;
-                                                    let rectangles = [(a, b), (u - a, b), (a, v - b), (u - a, v - b)];
-                                                    let mut intergrate=0.0;
-                                                    for &(m, n) in &rectangles {
-                                                        intergrate+=calculate_f(m, n);
-                                                        intergrate+=calculate_f(n, m);
-                                                    }
-                                                    intergrate/PI
-                                                };  
-                                                //println!("b:{}",b);
-                                                b=2.0/(1.0/intergrate+1.0/b);
+                                                // let intergrate={
+                                                //     let u=rect_light.u_l;
+                                                //     let v=rect_light.v_l;
+                                                //     let a=rect_light.u_l*sample_wrap.x;
+                                                //     let b=rect_light.v_l*sample_wrap.y;
+                                                //     let rectangles = [(a, b), (u - a, b), (a, v - b), (u - a, v - b)];
+                                                //     let mut intergrate=0.0;
+                                                //     for &(m, n) in &rectangles {
+                                                //         intergrate+=calculate_f(m, n);
+                                                //         intergrate+=calculate_f(n, m);
+                                                //     }
+                                                //     intergrate/PI
+                                                // };  
+                                                // b=2.0/(1.0/intergrate+1.0/b);
                                                 // b=1.0;
                                                  while num_pos_stack != 0 && max_stack > 0 {
                                                     let mut sign = if num_pos_stack > 0 { 1.0 } else { -1.0 };
