@@ -1,0 +1,9 @@
+e:\RustProject\rustlight\examples\web\target\debug\deps\wasm_bindgen_test-1050d3c6b92b5cf0.rmeta: C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\lib.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\mod.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\browser.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\detect.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\node.rs
+
+e:\RustProject\rustlight\examples\web\target\debug\deps\wasm_bindgen_test-1050d3c6b92b5cf0.d: C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\lib.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\mod.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\browser.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\detect.rs C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\node.rs
+
+C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\lib.rs:
+C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\mod.rs:
+C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\browser.rs:
+C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\detect.rs:
+C:\Users\xy_zm\.cargo\registry\src\index.crates.io-6f17d22bba15001f\wasm-bindgen-test-0.3.32\src\rt\node.rs:

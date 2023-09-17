@@ -32,7 +32,7 @@ env_logger = "*"
 # To know number of threads
 num_cpus = "*"
 # - openexr image format (output)
-openexr = { version = "*", optional = true }
+openexr = { path = "C:/Users/xy_zm/.cargo/git/checkouts/openexr-rs-1b2cea68adc6ad18/735a4bb", optional = true }
 # - pbrt image format (input)
 pbrt_rs = { git = "https://github.com/beltegeuse/pbrt_rs", optional = true }
 
