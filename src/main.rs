@@ -237,7 +237,7 @@ fn main() {
                     .arg(
                         Arg::with_name("strategy")
                             .takes_value(true)
-                            .help("sampling strategy: [uv, vt, st, cmis, dmis, average, smis_jacobian, smis_all]")
+                            .help("sampling strategy: [uv, vt, st, cmis, dmis, average, smis_jacobian, smis_all, proxy_sample]")
                             .short("s")
                             .default_value("average"),
                     ).arg(
@@ -583,7 +583,7 @@ fn main() {
                 },
             ))
         }
-        ("plane_single", Some(m)) => {
+        ("plane_single", Some(m)) =>  {
             let nb_primitive = value_t_or_exit!(m.value_of("nb_primitive"), usize);
             let strategy = value_t_or_exit!(m.value_of("strategy"), String);
             let strategy = match strategy.as_ref() {
@@ -605,6 +605,9 @@ fn main() {
                 "smis_jacobian" => {
                     let samples_smis = value_t_or_exit!(m.value_of("samples_smis"), usize);
                     rustlight::integrators::explicit::plane_single::SinglePlaneStrategy::SMISJacobian(samples_smis)
+                }
+                "proxy_sample" => {
+                    rustlight::integrators::explicit::plane_single::SinglePlaneStrategy::ProxySample
                 }
                 _ => panic!(
                     "{} is not a correct strategy choice (uv, ut, vt, average, discrete_mis, valpha, cmis)",

@@ -227,7 +227,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 [[package]]
 name = "embree"
 version = "0.3.7"
-source = "git+https://github.com/beltegeuse/embree-rs#d76c01fca1e1785e38e5976e1987f744c63bdb60"
+source = "git+https://github.com/beltegeuse/embree-rs#7948cd8d2036601a3a4f0b3b0028be1b2fd15552"
 dependencies = [
  "cgmath",
 ]

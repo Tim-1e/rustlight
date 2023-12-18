@@ -6,6 +6,7 @@ use crate::samplers;
 use crate::structure::AABB;
 use crate::volume::*;
 use cgmath::{ElementWise, EuclideanSpace, InnerSpace, Point2, Point3, Vector3};
+use rayon::range;
 
 fn clamp<T: PartialOrd>(v: T, min: T, max: T) -> T {
     if v < min {
@@ -299,6 +300,7 @@ pub enum SinglePlaneStrategy {
     ContinousMIS,
     SMISAll(usize),
     SMISJacobian(usize),
+    ProxySample,
 }
 
 pub struct IntegratorSinglePlane {
@@ -370,7 +372,7 @@ impl Integrator for IntegratorSinglePlane {
         };
 
         // Create the planes
-        let m = scene.volume.as_ref().unwrap();
+        let m: &HomogenousVolume = scene.volume.as_ref().unwrap();
         //let mut sampler = samplers::independent::IndependentSampler::default();
         let mut sampler = samplers::independent::IndependentSampler::from_seed(0);
 
@@ -427,7 +429,8 @@ impl Integrator for IntegratorSinglePlane {
                 SinglePlaneStrategy::UAlpha
                 | SinglePlaneStrategy::ContinousMIS
                 | SinglePlaneStrategy::SMISAll(_)
-                | SinglePlaneStrategy::SMISJacobian(_) => {
+                | SinglePlaneStrategy::SMISJacobian(_)
+                | SinglePlaneStrategy::ProxySample => {
                     planes.push(generate_plane(
                         PlaneType::UAlphaT,
                         &rect_lights,
@@ -503,14 +506,15 @@ impl Integrator for IntegratorSinglePlane {
                                     };
                                     let rho = phase_function
                                         .eval(&(-ray.d), &(p_light - p_hit).normalize());
-                                    let w = match self.strategy {
+                                    let w: f32 = match self.strategy {
                                         SinglePlaneStrategy::UT
                                         | SinglePlaneStrategy::UV
                                         | SinglePlaneStrategy::VT
                                         | SinglePlaneStrategy::UAlpha
                                         | SinglePlaneStrategy::ContinousMIS
                                         | SinglePlaneStrategy::SMISAll(_)
-                                        | SinglePlaneStrategy::SMISJacobian(_) => 1.0,
+                                        | SinglePlaneStrategy::SMISJacobian(_)
+                                        | SinglePlaneStrategy::ProxySample => 1.0,
                                         SinglePlaneStrategy::Average => 1.0 / 3.0,
                                         SinglePlaneStrategy::DiscreteMIS => {
                                             // Need to compute all possible shapes
@@ -591,11 +595,7 @@ impl Integrator for IntegratorSinglePlane {
 
                                             1.0 / ((2.0 / std::f32::consts::PI)
                                                 * (rect_light.u.cross(plane.d1).dot(ray.d).powi(2)
-                                                    + rect_light
-                                                        .v
-                                                        .cross(plane.d1)
-                                                        .dot(ray.d)
-                                                        .powi(2))
+                                                    + rect_light.v.cross(plane.d1).dot(ray.d).powi(2))
                                                 .sqrt())
                                                 * plane.weight // The original jacobian cancel out
                                         }
@@ -709,10 +709,97 @@ impl Integrator for IntegratorSinglePlane {
 
                                             w * contrib
                                         }
+
+                                        // Proxy sample
+                                        SinglePlaneStrategy::ProxySample => {
+                                            // Compute wrap random number for generating fake planes that generate same
+                                            // path configuration. Indeed, we need to be sure that the new planes alpha plane
+                                            // cross the same point on the light source
+                                            let mut sample_wrap = {
+                                                let p_l = p_light - rect_light.o;
+                                                Point2::new(
+                                                    p_l.dot(rect_light.u) / rect_light.u_l,
+                                                    p_l.dot(rect_light.v) / rect_light.v_l,
+                                                )
+                                            };
+
+                                            // Mitigate floating point precision issue
+                                            sample_wrap.x = clamp(sample_wrap.x, 0.0, 1.0);
+                                            sample_wrap.y = clamp(sample_wrap.y, 0.0, 1.0);
+
+                                            // let mut sum_contrib = 0.0;
+                                            // let num=50;
+                                            // for _ in 0..num  {
+                                            //     // The new alpha
+                                            //     let new_alpha = sampler_ecmis.next();
+                                            //     assert!(new_alpha >= 0.0 && new_alpha <= 1.0);
+
+                                            //     // This construct a new plane (call previous snipped)
+                                            //     // to generate the plane
+                                            //     let new_plane = SinglePhotonPlane::new(
+                                            //         PlaneType::UAlphaT,
+                                            //         &rect_light,
+                                            //         plane.d1,
+                                            //         sample_wrap, // Random number used to sample the point on the light source
+                                            //         new_alpha,
+                                            //         0.0,
+                                            //         plane.id_emitter,
+                                            //         m.sigma_s,
+                                            //     );
+
+                                            //     // Accumulate the weight
+                                            //     sum_contrib += new_plane.d1
+                                            //                     .cross(new_plane.d0)
+                                            //                     .dot(ray.d)
+                                            //                     .abs();
+                                            // }
+                                            // let inv_norm = num as f32 / sum_contrib;
+                                            let mut inv_norm:f32=0.0;
+                                            let mut num_pos_stack = 1;
+                                            let mut max_stack = 1000;
+                                            //let B=(rect_light.u_l.powf(2.0)+rect_light.v_l.powf(2.0)).sqrt();
+                                            let B=rect_light.u_l.max(rect_light.v_l);
+                                            while num_pos_stack != 0 && max_stack > 0 {
+                                                let sign = if num_pos_stack > 0 { 1.0 } else { -1.0 };
+                                                num_pos_stack -= sign as i32;
+
+                                                // This construct a new plane (call previous snipped)
+                                                // to generate the plane
+                                                let new_plane = SinglePhotonPlane::new(
+                                                    PlaneType::UAlphaT,
+                                                    &rect_light,
+                                                    plane.d1,
+                                                    sample_wrap, // Random number used to sample the point on the light source
+                                                    sampler_ecmis.next(),
+                                                    0.0,
+                                                    plane.id_emitter,
+                                                    m.sigma_s,
+                                                );
+                                                let f0 = new_plane
+                                                            .d1
+                                                            .cross(new_plane.d0)
+                                                            .dot(ray.d)
+                                                            .abs();
+                                                let g0=1.0-f0/B;
+                                                
+                                                assert!(g0>=0.0);
+                                                
+                                                inv_norm += 1.0 / B * sign; // Replace 0.0 with the actual value of B.
+                                                let r0 = g0.abs();
+                                                let mut r_round = r0.floor();
+                                                if sampler_ecmis.next() < r0 - r_round{
+                                                    r_round += 1.0;
+                                                }
+                                                num_pos_stack += sign as i32 * r_round as i32;
+                                                max_stack -= 1;
+                                            }   
+                                            
+                                            inv_norm*plane.weight
+                                        }
                                         // Default: evaluate and weight the contrib
                                         // plane.contrib(..) =  plane.weight / jacobian
                                         // w: other MIS compute above
-                                        _ => (w * plane.contrib(&ray.d)), // Do nothing and just evaluate the plane
+                                        _ => w * plane.contrib(&ray.d), // Do nothing and just evaluate the plane
                                     };
 
                                     // Compute the rest of the term

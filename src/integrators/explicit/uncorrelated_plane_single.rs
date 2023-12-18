@@ -177,7 +177,8 @@ impl Integrator for IntegratorSinglePlaneUncorrelated {
                                     SinglePlaneStrategy::UAlpha
                                     | SinglePlaneStrategy::ContinousMIS
                                     | SinglePlaneStrategy::SMISAll(_)
-                                    | SinglePlaneStrategy::SMISJacobian(_) => generate_plane(
+                                    | SinglePlaneStrategy::SMISJacobian(_)
+                                    | SinglePlaneStrategy::ProxySample => generate_plane(
                                         PlaneType::UAlphaT,
                                         &rect_lights,
                                         id_emitter,
@@ -210,7 +211,8 @@ impl Integrator for IntegratorSinglePlaneUncorrelated {
                                         | SinglePlaneStrategy::UAlpha
                                         | SinglePlaneStrategy::ContinousMIS
                                         | SinglePlaneStrategy::SMISAll(_)
-                                        | SinglePlaneStrategy::SMISJacobian(_) => 1.0,
+                                        | SinglePlaneStrategy::SMISJacobian(_)
+                                        | SinglePlaneStrategy::ProxySample => 1.0,
                                         SinglePlaneStrategy::Average => 1.0 / 3.0,
                                         SinglePlaneStrategy::DiscreteMIS => {
                                             // Need to compute all possible shapes
