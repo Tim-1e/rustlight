@@ -59,6 +59,12 @@ impl RectangularLightSource {
 
         let n = u.cross(v);
         info!("Light source normal: {:?}", n);
+
+        let emission = match emitter.emission {
+            crate::geometry::EmissionType::Color { v } => v,
+            _ => panic!(),
+        };
+
         RectangularLightSource {
             o,
             n,
@@ -66,7 +72,7 @@ impl RectangularLightSource {
             v,
             u_l,
             v_l,
-            emission: emitter.emission,
+            emission,
         }
     }
 }
@@ -77,8 +83,8 @@ pub struct SinglePhotonPlane {
     o: Point3<f32>,            // Plane origin
     pub d0: Vector3<f32>,      // First edge (normalized)
     pub d1: Vector3<f32>,      // Second edge (normalized)
-    pub length0: f32,          // First edge length
-    pub length1: f32,          // Second edge length
+    length0: f32,              // First edge length
+    length1: f32,              // Second edge length
     pub sample: Point2<f32>,   // Random number used to generate the plane (TODO: Unused?)
     pub plane_type: PlaneType, // How the plane have been generated
     pub weight: Color,         // This factor will vary between the different light sources
@@ -280,8 +286,6 @@ impl SinglePhotonPlane {
                         / u_plane_length,
                     // Store the emitter ID
                     id_emitter,
-                    // storing the eandom sample for the orientation
-                    // usefull for stratification
                     sample_alpha,
                 }
             }
@@ -310,7 +314,12 @@ pub struct IntegratorSinglePlane {
 }
 
 impl Integrator for IntegratorSinglePlane {
-    fn compute(&mut self, accel: &dyn Acceleration, scene: &Scene) -> BufferCollection {
+    fn compute(
+        &mut self,
+        sampler: &mut dyn Sampler,
+        accel: &dyn Acceleration,
+        scene: &Scene,
+    ) -> BufferCollection {
         if scene.volume.is_none() {
             panic!("Volume integrator need a volume (add -m )");
         }
@@ -318,7 +327,7 @@ impl Integrator for IntegratorSinglePlane {
         let emitters = scene
             .meshes
             .iter()
-            .filter(|m| !m.emission.is_zero())
+            .filter(|m| m.is_light())
             .collect::<Vec<_>>();
         let rect_lights = {
             emitters
@@ -355,7 +364,7 @@ impl Integrator for IntegratorSinglePlane {
             // TODO: Check if it is the code
             // Need to check the intersection distance iff need to failed ...
             // ray_med.tfar = intersection_distance;
-            let mrec = m.sample(&ray_med, sampler.next2d());
+            let mrec = m.sample(&ray_med, sampler.next());
 
             // Sample planes
             let sample = sampler.next2d();
@@ -372,10 +381,7 @@ impl Integrator for IntegratorSinglePlane {
         };
 
         // Create the planes
-        let m: &HomogenousVolume = scene.volume.as_ref().unwrap();
-        //let mut sampler = samplers::independent::IndependentSampler::default();
-        let mut sampler = samplers::independent::IndependentSampler::from_seed(0);
-
+        let m = scene.volume.as_ref().unwrap();
         let mut planes = vec![];
         let mut number_plane_gen = 0;
         while planes.len() < self.nb_primitive {
@@ -385,21 +391,21 @@ impl Integrator for IntegratorSinglePlane {
                     PlaneType::UT,
                     &rect_lights,
                     id_emitter,
-                    &mut sampler,
+                    sampler,
                     m,
                 )),
                 SinglePlaneStrategy::VT => planes.push(generate_plane(
                     PlaneType::VT,
                     &rect_lights,
                     id_emitter,
-                    &mut sampler,
+                    sampler,
                     m,
                 )),
                 SinglePlaneStrategy::UV => planes.push(generate_plane(
                     PlaneType::UV,
                     &rect_lights,
                     id_emitter,
-                    &mut sampler,
+                    sampler,
                     m,
                 )),
                 SinglePlaneStrategy::DiscreteMIS | SinglePlaneStrategy::Average => {
@@ -408,21 +414,21 @@ impl Integrator for IntegratorSinglePlane {
                         PlaneType::UV,
                         &rect_lights,
                         id_emitter,
-                        &mut sampler,
+                        sampler,
                         m,
                     ));
                     planes.push(generate_plane(
                         PlaneType::VT,
                         &rect_lights,
                         id_emitter,
-                        &mut sampler,
+                        sampler,
                         m,
                     ));
                     planes.push(generate_plane(
                         PlaneType::UT,
                         &rect_lights,
                         id_emitter,
-                        &mut sampler,
+                        sampler,
                         m,
                     ));
                 }
@@ -435,7 +441,7 @@ impl Integrator for IntegratorSinglePlane {
                         PlaneType::UAlphaT,
                         &rect_lights,
                         id_emitter,
-                        &mut sampler,
+                        sampler,
                         m,
                     ));
                 }
@@ -449,7 +455,7 @@ impl Integrator for IntegratorSinglePlane {
 
         // Generate the image block to get VPL efficiently
         let buffernames = vec![String::from("primal")];
-        let mut image_blocks = generate_img_blocks(scene, &buffernames);
+        let mut image_blocks = generate_img_blocks(scene, sampler, &buffernames);
 
         // Gathering all planes
         info!("Gathering Single planes...");
@@ -457,42 +463,45 @@ impl Integrator for IntegratorSinglePlane {
         let pool = generate_pool(scene);
         let phase_function = PhaseFunction::Isotropic();
         pool.install(|| {
-            image_blocks.par_iter_mut().for_each(|im_block| {
-                // Sensor sampler is not used as to produce SMIS results, no AA was used.
-                let mut _sampler_ray = samplers::independent::IndependentSampler::from_seed(
-                    (im_block.pos.x + im_block.pos.y) as u64,
-                );
-                let mut sampler_ecmis = samplers::independent::IndependentSampler::from_seed(
-                    (im_block.pos.x + im_block.pos.y) as u64,
-                );
-                for ix in 0..im_block.size.x {
-                    for iy in 0..im_block.size.y {
-                        for _ in 0..scene.nb_samples {
-                            let (ix_c, iy_c) = (ix + im_block.pos.x, iy + im_block.pos.y);
-                            let pix = Point2::new(
-                                ix_c as f32 + 0.5, //sampler_ray.next(),
-                                iy_c as f32 + 0.5, //sampler_ray.next(),
-                            );
-                            let mut ray = scene.camera.generate(pix);
+            image_blocks
+                .par_iter_mut()
+                .for_each(|(im_block, sampler_ray)| {
+                    // Sensor sampler is not used as to produce SMIS results, no AA was used.
+                    let mut _sampler_ray = samplers::independent::IndependentSampler::from_seed(
+                        (im_block.pos.x + im_block.pos.y) as u64,
+                    );
+                    let mut sampler_ecmis = samplers::independent::IndependentSampler::from_seed(
+                        (im_block.pos.x + im_block.pos.y) as u64,
+                    );
+                    
+                    for ix in 0..im_block.size.x {
+                        for iy in 0..im_block.size.y {
+                            for _ in 0..scene.nb_samples {
+                                let (ix_c, iy_c) = (ix + im_block.pos.x, iy + im_block.pos.y);
+                                let pix = Point2::new(
+                                    ix_c as f32 + sampler_ray.next(),
+                                    iy_c as f32 + sampler_ray.next(),
+                                );
+                                let mut ray = scene.camera.generate(pix);
 
-                            // Get the max distance
-                            let max_dist = match accel.trace(&ray) {
-                                Some(x) => x.dist,
-                                None => std::f32::MAX,
-                            };
-                            ray.tfar = max_dist;
+                                // Get the max distance
+                                let max_dist = match accel.trace(&ray) {
+                                    Some(x) => x.dist,
+                                    None => std::f32::MAX,
+                                };
+                                ray.tfar = max_dist;
 
-                            // Now gather all planes
-                            let mut c = Color::value(0.0);
-                            for (plane_its, b_id) in bvh_plane.gather(ray) {
-                                let plane = &bvh_plane.elements[b_id];
-                                // This code is if we do not use BVH
-                                // for plane in &planes {
-                                // let plane_its = plane.intersection(&ray);
-                                // if plane_its.is_none() {
-                                // 	continue;
-                                // }
-                                // let plane_its = plane_its.unwrap();
+                                // Now gather all planes
+                                let mut c = Color::value(0.0);
+                                for (plane_its, b_id) in bvh_plane.gather(&ray) {
+                                    let plane = &bvh_plane.elements[b_id];
+                                    // This code is if we do not use BVH
+                                    // for plane in &planes {
+                                    // let plane_its = plane.intersection(&ray);
+                                    // if plane_its.is_none() {
+                                    // 	continue;
+                                    // }
+                                    // let plane_its = plane_its.unwrap();
 
                                 let p_hit = ray.o + ray.d * plane_its.t_cam;
                                 let p_light = plane
@@ -813,20 +822,24 @@ impl Integrator for IntegratorSinglePlane {
                                 }
                             }
 
-                            im_block.accumulate(Point2 { x: ix, y: iy }, c, &"primal".to_owned());
+                                im_block.accumulate(
+                                    Point2 { x: ix, y: iy },
+                                    c,
+                                    &"primal".to_owned(),
+                                );
+                            }
                         }
+                    } // Image block
+                    im_block.scale(1.0 / (scene.nb_samples as f32));
+                    {
+                        progress_bar.lock().unwrap().inc();
                     }
-                } // Image block
-                im_block.scale(1.0 / (scene.nb_samples as f32));
-                {
-                    progress_bar.lock().unwrap().inc();
-                }
-            });
+                });
         });
 
         let mut image =
             BufferCollection::new(Point2::new(0, 0), *scene.camera.size(), &buffernames);
-        for im_block in &image_blocks {
+        for (im_block, _) in &image_blocks {
             image.accumulate_bitmap(im_block);
         }
         image

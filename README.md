@@ -2,8 +2,6 @@
 Rustlight <img src="http://beltegeuse.s3-website-ap-northeast-1.amazonaws.com/rustlight/logo.png" width="96"> 
 </h1>
 
-[![Build Status](https://travis-ci.org/beltegeuse/rustlight.svg?branch=smis-planes)](https://travis-ci.org/beltegeuse/rustlight)
-
 Physically-based rendering engine implemented with **Rust**.
 
 ## How to replicate CMIS Photon planes
@@ -21,28 +19,32 @@ $ unzip plane_scene.zip
 
 2) You can regenerate results of figure 11. Note that the first invocation of cargo will build the project:
 ```shell
-$ export SCENE=scene/meeting_ply.pbrt
-$ export NBPLANES=40960
-$ cargo run --features="pbrt openexr" --release -- -t -2 -n 1 -o ualpha.exr -m 0.2 $SCENE plane_single -n $NBPLANES -s ualpha
-$ cargo run --features="pbrt openexr" --release -- -t -2 -n 1 -o smis_jacobian_k2_stratified.exr -m 0.2 $SCENE plane_single -n $NBPLANES -s smis_jacobian -k 2 -x
-$ cargo run --features="pbrt openexr" --release -- -t -2 -n 1 -o smis_all_k2_stratified.exr -m 0.2 $SCENE plane_single -n $NBPLANES -s smis_all -k 2 -x
-$ cargo run --features="pbrt openexr" --release -- -t -2 -n 1 -o cmis.exr -m 0.2 $SCENE plane_single -n $NBPLANES -s cmis
+$ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o ualpha.pfm -m 0.2 .\scene\meeting_ply.pbrt plane-single -n 40960 -s ualpha
+$ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o smis_jacobian_k2_stratified.pfm -m 0.2 .\scene\meeting_ply.pbrt plane_single -n 40960 -s smis_jacobian -k 2 -x
+$ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o smis_all_k2_stratified.pfm -m 0.2 .\scene\meeting_ply.pbrt plane-single -n 40960 -s smis_all -k 2 -x
+$ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o cmis.pfm -m 0.2 .\scene\meeting_ply.pbrt plane-single -n 40960 -s cmis
 ```
-The precomputed reference is available at: http://adrien-gruson.com/research/2020_CMIS/plane_reference.exr
+The precomputed reference is available at: http://data.adrien-gruson.com/research/2020_CMIS/plane_reference.pfm
 
 For more information about the available options for this particular integrator:
 ```shell
 $ cargo run --release --features="pbrt openexr" -- -t -2 -n 1 -o ualpha.exr -m 0.2 $SCENE plane_single -h
 ```
 
-## Dependencies
+Other examples (wasm, viewer) are planned.
 
-Optionals : 
+## Optional Features
 
-- [image](https://github.com/image-rs/image) : load and save LDR images
-- [openexr](https://github.com/cessen/openexr-rs) : load and save EXR images
-- [embree-rs](https://github.com/Twinklebear/embree-rs) : fast primitive/ray intersection (* not yet optional)
-- [pbrt_rs](https://github.com/beltegeuse/pbrt_rs) : read PBRT files 
+It is possible to activate/desactivate some features of rustlight depending of your needs:
+
+- **image**(*): load and save LDR images (via [image]((https://github.com/image-rs/image)))
+- **openexr**: load and save EXR images (via [openexr-rs](https://github.com/cessen/openexr-rs))
+- **pbrt**(*): read PBRT files (via [pbrt_rs]((https://github.com/beltegeuse/pbrt_rs))) [Not that only support a subset PBRT primitives]
+- **mitsuba**(*): read Mitsuba files (via [mitsuba_rs]((https://github.com/beltegeuse/mitsuba_rs))) [Not that only support a subset Mitsuba primitives]
+- **progress-bar**(*): show progress bar (via [pbr]((https://crates.io/crates/pbr))) 
+- **embree**: fast intersection (via [embree-rs](https://github.com/Twinklebear/embree-rs))
+
+(*) These features are activated by default.
 
 ## More information
 

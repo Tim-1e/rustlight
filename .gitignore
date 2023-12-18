@@ -9,10 +9,21 @@
 /*.pfm
 /*.exr
 /*.csv
-/*.sh
 /data/*.blend*
 /data/*.bak
 /data/*
 /images/
 /result/
 
+/scripts
+/*.pbrt
+/*.mask
+/*.avi
+/*.tar
+/*.tgz
+/*.tar.gz
+/*.zip
+/*.log
+/results-new/
+/tmp.*
+/scene/
