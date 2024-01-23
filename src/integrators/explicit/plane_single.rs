@@ -1,5 +1,4 @@
 use std::f32::consts::PI;
-use std::ops::Add;
 use std::process::exit;
 
 use crate::accel::*;
@@ -773,7 +772,7 @@ impl Integrator for IntegratorSinglePlane {
                                                 }
                                                 _ => panic!("Unimplemented"),
                                             };
-                                            block_sampel_num+=n_samples;
+                                            block_sampel_num+=n_samples-1;
                                             w * contrib
                                         }
 
@@ -912,7 +911,7 @@ impl Integrator for IntegratorSinglePlane {
                                                 
 
                                                 let g0=1.0-ff/b;
-                                                assert!(g0>=0.0);
+                                                //assert!(g0>=0.0);
                                                 inv_norm += 1.0 / b * sign; 
                                                 if g0<0.0 {
                                                     sign*=-1.0;

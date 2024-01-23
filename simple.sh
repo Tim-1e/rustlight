@@ -28,9 +28,7 @@ smis Elapsed Integrator: 31123 ms 3
 cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o .\result\smis_all_k2_stratified.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s smis_all -k 2 -x
 
 
-cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o .\result\proxy_1.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 10240 -s proxy_sample;
-cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 2 -o .\result\proxy_2.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 10240 -s proxy_sample;
-cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 3 -o .\result\proxy_3.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 10240 -s proxy_sample;
-cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 4 -o .\result\proxy_4.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 10240 -s proxy_sample;
-cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 5 -o .\result\proxy_5.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 10240 -s proxy_sample;
+cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 3 -o .\result\proxy.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s proxy_sample
+cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 3 -o .\result\smis_all_k2_stratified.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s smis_all -k 2 -x
+cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o .\result\smis_all_k4_stratified.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s smis_all -k 4 -x
 $echo
