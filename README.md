@@ -1,5 +1,5 @@
 <h1>
-Rustlight <img src="http://beltegeuse.s3-website-ap-northeast-1.amazonaws.com/rustlight/logo.png" width="96"> 
+Rustlight
 </h1>
 
 Physically-based rendering engine implemented with **Rust**.
@@ -27,8 +27,6 @@ $ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1
 $ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o cmis.pfm -m 0.2 .\scene\meeting_ply.pbrt plane-single -n 40960 -s cmis
 ```
 
-The precomputed reference is available at: http://data.adrien-gruson.com/research/2020_CMIS/plane_reference.pfm
-
 For more information about the available options for this particular integrator:
 
 ```shell
@@ -42,17 +40,20 @@ cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 3 -
 cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 3 -o .\result\smis_all_k2_stratified.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s smis_all -k 2 -x
 cargo run --features="pbrt progress-bar" --release --example=cli -- -t -2 -n 1 -o .\result\smis_all_k4_stratified.png -m 0.2 "scene/meeting_ply.pbrt" plane-single -n 40960 -s smis_all -k 4 -x
 ```
+
 You could get the sample number per pixel at the end of the output.
+
+we offer a png format result for you to check [reference](./image/plane_reference.png)
 
 ## Optional Features
 
 It is possible to activate/desactivate some features of rustlight depending of your needs:
 
-- **image**(*): load and save LDR images (via [image](https://github.com/image-rs/image)))
+- **image**(*): load and save LDR images (via [image](https://github.com/image-rs/image))
 - **openexr**: load and save EXR images (via [openexr-rs](https://github.com/cessen/openexr-rs))
-- **pbrt**(*): read PBRT files (via [pbrt_rs](https://github.com/beltegeuse/pbrt_rs))) [Not that only support a subset PBRT primitives]
-- **mitsuba**(*): read Mitsuba files (via [mitsuba_rs](https://github.com/beltegeuse/mitsuba_rs))) [Not that only support a subset Mitsuba primitives]
-- **progress-bar**(*): show progress bar (via [pbr](https://crates.io/crates/pbr)))
+- **pbrt**(*): read PBRT files (via [pbrt_rs](https://github.com/beltegeuse/pbrt_rs)) [Not that only support a subset PBRT primitives]
+- **mitsuba**(*): read Mitsuba files (via [mitsuba_rs](https://github.com/beltegeuse/mitsuba_rs)) [Not that only support a subset Mitsuba primitives]
+- **progress-bar**(*): show progress bar (via [pbr](https://crates.io/crates/pbr))
 - **embree**: fast intersection (via [embree-rs](https://github.com/Twinklebear/embree-rs))
 
 (*) These features are activated by default.

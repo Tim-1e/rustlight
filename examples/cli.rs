@@ -645,7 +645,7 @@ fn main() {
             nb_primitive,
             strategy,
             stratified,
-            samples_smis
+            samples_smis,
         } => {
             let strategy = match strategy.as_ref() {
                 "uv" => rustlight::integrators::explicit::plane_single::SinglePlaneStrategy::UV,
@@ -682,7 +682,7 @@ fn main() {
             nb_primitive,
             strategy,
             stratified,
-            samples_smis
+            samples_smis,
         } => {
             let strategy = match strategy.as_ref() {
                 "uv" => rustlight::integrators::explicit::plane_single::SinglePlaneStrategy::UV,
@@ -712,7 +712,7 @@ fn main() {
                 rustlight::integrators::explicit::plane_single::IntegratorSinglePlane {
                     nb_primitive,
                     strategy,
-                    stratified
+                    stratified,
                 },
             ))
         }

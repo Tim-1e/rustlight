@@ -110,75 +110,75 @@ impl Integrator for IntegratorSinglePlaneUncorrelated {
                                 };
                                 ray.tfar = max_dist;
 
-                            // Now gather all planes
-                            let mut c = Color::value(0.0);
-                            for _id_plane in 0..self.nb_primitive {
-                                let id_emitter =
-                                    (sampler_ray.next() * rect_lights.len() as f32) as usize;
-                                let plane = match self.strategy {
-                                    SinglePlaneStrategy::UT => generate_plane(
-                                        PlaneType::UT,
-                                        &rect_lights,
-                                        id_emitter,
-                                        sampler_ray.as_mut(),
-                                        m,
-                                    ),
-                                    SinglePlaneStrategy::VT => generate_plane(
-                                        PlaneType::VT,
-                                        &rect_lights,
-                                        id_emitter,
-                                        sampler_ray.as_mut(),
-                                        m,
-                                    ),
-                                    SinglePlaneStrategy::UV => generate_plane(
-                                        PlaneType::UV,
-                                        &rect_lights,
-                                        id_emitter,
-                                        sampler_ray.as_mut(),
-                                        m,
-                                    ),
-                                    SinglePlaneStrategy::DiscreteMIS
-                                    | SinglePlaneStrategy::Average => {
-                                        // Generate 3 planes
-                                        let plane_type = sampler_ray.next();
-                                        if plane_type < (1.0 / 3.0) {
-                                            generate_plane(
-                                                PlaneType::UV,
-                                                &rect_lights,
-                                                id_emitter,
-                                                sampler_ray.as_mut(),
-                                                m,
-                                            )
-                                        } else if plane_type < (2.0 / 3.0) {
-                                            generate_plane(
-                                                PlaneType::VT,
-                                                &rect_lights,
-                                                id_emitter,
-                                                sampler_ray.as_mut(),
-                                                m,
-                                            )
-                                        } else {
-                                            generate_plane(
-                                                PlaneType::UT,
-                                                &rect_lights,
-                                                id_emitter,
-                                                sampler_ray.as_mut(),
-                                                m,
-                                            )
+                                // Now gather all planes
+                                let mut c = Color::value(0.0);
+                                for _id_plane in 0..self.nb_primitive {
+                                    let id_emitter =
+                                        (sampler_ray.next() * rect_lights.len() as f32) as usize;
+                                    let plane = match self.strategy {
+                                        SinglePlaneStrategy::UT => generate_plane(
+                                            PlaneType::UT,
+                                            &rect_lights,
+                                            id_emitter,
+                                            sampler_ray.as_mut(),
+                                            m,
+                                        ),
+                                        SinglePlaneStrategy::VT => generate_plane(
+                                            PlaneType::VT,
+                                            &rect_lights,
+                                            id_emitter,
+                                            sampler_ray.as_mut(),
+                                            m,
+                                        ),
+                                        SinglePlaneStrategy::UV => generate_plane(
+                                            PlaneType::UV,
+                                            &rect_lights,
+                                            id_emitter,
+                                            sampler_ray.as_mut(),
+                                            m,
+                                        ),
+                                        SinglePlaneStrategy::DiscreteMIS
+                                        | SinglePlaneStrategy::Average => {
+                                            // Generate 3 planes
+                                            let plane_type = sampler_ray.next();
+                                            if plane_type < (1.0 / 3.0) {
+                                                generate_plane(
+                                                    PlaneType::UV,
+                                                    &rect_lights,
+                                                    id_emitter,
+                                                    sampler_ray.as_mut(),
+                                                    m,
+                                                )
+                                            } else if plane_type < (2.0 / 3.0) {
+                                                generate_plane(
+                                                    PlaneType::VT,
+                                                    &rect_lights,
+                                                    id_emitter,
+                                                    sampler_ray.as_mut(),
+                                                    m,
+                                                )
+                                            } else {
+                                                generate_plane(
+                                                    PlaneType::UT,
+                                                    &rect_lights,
+                                                    id_emitter,
+                                                    sampler_ray.as_mut(),
+                                                    m,
+                                                )
+                                            }
                                         }
-                                    }
-                                    SinglePlaneStrategy::UAlpha
-                                    | SinglePlaneStrategy::ContinousMIS
-                                    | SinglePlaneStrategy::SMISAll(_)
-                                    | SinglePlaneStrategy::SMISJacobian(_)
-                                    | SinglePlaneStrategy::ProxySample => generate_plane(
-                                        PlaneType::UAlphaT,
-                                        &rect_lights,
-                                        id_emitter,
-                                        sampler_ray.as_mut(),
-                                        m,
-                                    ),
-                                };
+                                        SinglePlaneStrategy::UAlpha
+                                        | SinglePlaneStrategy::ContinousMIS
+                                        | SinglePlaneStrategy::SMISAll(_)
+                                        | SinglePlaneStrategy::SMISJacobian(_)
+                                        | SinglePlaneStrategy::ProxySample => generate_plane(
+                                            PlaneType::UAlphaT,
+                                            &rect_lights,
+                                            id_emitter,
+                                            sampler_ray.as_mut(),
+                                            m,
+                                        ),
+                                    };
 
                                     let plane_its = plane.intersection(&ray);
                                     if plane_its.is_none() {
@@ -186,75 +186,75 @@ impl Integrator for IntegratorSinglePlaneUncorrelated {
                                     }
                                     let plane_its = plane_its.unwrap();
 
-                                let p_hit = ray.o + ray.d * plane_its.t_cam;
-                                let p_light =
-                                    plane.light_position(&rect_lights[id_emitter], &plane_its);
-                                if accel.visible(&p_hit, &p_light) {
-                                    let transmittance = {
-                                        let mut ray_tr = Ray::new(ray.o, ray.d);
-                                        ray_tr.tfar = plane_its.t_cam;
-                                        m.transmittance(ray_tr)
-                                    };
-                                    let rho = phase_function
-                                        .eval(&(-ray.d), &(p_light - p_hit).normalize());
-                                    let w = match self.strategy {
-                                        SinglePlaneStrategy::UT
-                                        | SinglePlaneStrategy::UV
-                                        | SinglePlaneStrategy::VT
-                                        | SinglePlaneStrategy::UAlpha
-                                        | SinglePlaneStrategy::ContinousMIS
-                                        | SinglePlaneStrategy::SMISAll(_)
-                                        | SinglePlaneStrategy::SMISJacobian(_)
-                                        | SinglePlaneStrategy::ProxySample => 1.0,
-                                        SinglePlaneStrategy::Average => 1.0 / 3.0,
-                                        SinglePlaneStrategy::DiscreteMIS => {
-                                            // Need to compute all possible shapes
-                                            let d = p_hit - p_light;
-                                            // TODO: Not used
-                                            let t_sampled = d.magnitude();
-                                            let d = d / t_sampled;
-                                            let planes = [
-                                                SinglePhotonPlane::new(
-                                                    PlaneType::UV,
-                                                    &rect_lights[id_emitter],
-                                                    d,
-                                                    plane.sample,
-                                                    0.0,
-                                                    t_sampled,
-                                                    id_emitter,
-                                                    m.sigma_s,
-                                                ),
-                                                SinglePhotonPlane::new(
-                                                    PlaneType::UT,
-                                                    &rect_lights[id_emitter],
-                                                    d,
-                                                    plane.sample,
-                                                    0.0,
-                                                    t_sampled,
-                                                    id_emitter,
-                                                    m.sigma_s,
-                                                ),
-                                                SinglePhotonPlane::new(
-                                                    PlaneType::VT,
-                                                    &rect_lights[id_emitter],
-                                                    d,
-                                                    plane.sample,
-                                                    0.0,
-                                                    t_sampled,
-                                                    id_emitter,
-                                                    m.sigma_s,
-                                                ),
-                                            ];
-                                            // FIXME: Normally this code is unecessary
-                                            // 	As we can reuse the plane retrived.
-                                            // 	However, it seems to have a miss match between photon planes
-                                            //	contribution calculation.
-                                            let debug_id = match plane.plane_type {
-                                                PlaneType::UV => 0,
-                                                PlaneType::UT => 1,
-                                                PlaneType::VT => 2,
-                                                _ => unimplemented!(),
-                                            };
+                                    let p_hit = ray.o + ray.d * plane_its.t_cam;
+                                    let p_light =
+                                        plane.light_position(&rect_lights[id_emitter], &plane_its);
+                                    if accel.visible(&p_hit, &p_light) {
+                                        let transmittance = {
+                                            let mut ray_tr = Ray::new(ray.o, ray.d);
+                                            ray_tr.tfar = plane_its.t_cam;
+                                            m.transmittance(ray_tr)
+                                        };
+                                        let rho = phase_function
+                                            .eval(&(-ray.d), &(p_light - p_hit).normalize());
+                                        let w = match self.strategy {
+                                            SinglePlaneStrategy::UT
+                                            | SinglePlaneStrategy::UV
+                                            | SinglePlaneStrategy::VT
+                                            | SinglePlaneStrategy::UAlpha
+                                            | SinglePlaneStrategy::ContinousMIS
+                                            | SinglePlaneStrategy::SMISAll(_)
+                                            | SinglePlaneStrategy::SMISJacobian(_)
+                                            | SinglePlaneStrategy::ProxySample => 1.0,
+                                            SinglePlaneStrategy::Average => 1.0 / 3.0,
+                                            SinglePlaneStrategy::DiscreteMIS => {
+                                                // Need to compute all possible shapes
+                                                let d = p_hit - p_light;
+                                                // TODO: Not used
+                                                let t_sampled = d.magnitude();
+                                                let d = d / t_sampled;
+                                                let planes = [
+                                                    SinglePhotonPlane::new(
+                                                        PlaneType::UV,
+                                                        &rect_lights[id_emitter],
+                                                        d,
+                                                        plane.sample,
+                                                        0.0,
+                                                        t_sampled,
+                                                        id_emitter,
+                                                        m.sigma_s,
+                                                    ),
+                                                    SinglePhotonPlane::new(
+                                                        PlaneType::UT,
+                                                        &rect_lights[id_emitter],
+                                                        d,
+                                                        plane.sample,
+                                                        0.0,
+                                                        t_sampled,
+                                                        id_emitter,
+                                                        m.sigma_s,
+                                                    ),
+                                                    SinglePhotonPlane::new(
+                                                        PlaneType::VT,
+                                                        &rect_lights[id_emitter],
+                                                        d,
+                                                        plane.sample,
+                                                        0.0,
+                                                        t_sampled,
+                                                        id_emitter,
+                                                        m.sigma_s,
+                                                    ),
+                                                ];
+                                                // FIXME: Normally this code is unecessary
+                                                // 	As we can reuse the plane retrived.
+                                                // 	However, it seems to have a miss match between photon planes
+                                                //	contribution calculation.
+                                                let debug_id = match plane.plane_type {
+                                                    PlaneType::UV => 0,
+                                                    PlaneType::UT => 1,
+                                                    PlaneType::VT => 2,
+                                                    _ => unimplemented!(),
+                                                };
 
                                                 planes[debug_id].contrib(&ray.d).avg().powi(-1)
                                                     / planes

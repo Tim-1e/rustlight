@@ -583,7 +583,7 @@ fn main() {
                 },
             ))
         }
-        ("plane_single", Some(m)) =>  {
+        ("plane_single", Some(m)) => {
             let nb_primitive = value_t_or_exit!(m.value_of("nb_primitive"), usize);
             let strategy = value_t_or_exit!(m.value_of("strategy"), String);
             let strategy = match strategy.as_ref() {
